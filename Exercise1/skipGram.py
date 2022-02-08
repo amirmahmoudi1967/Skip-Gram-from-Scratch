@@ -1,6 +1,7 @@
 from __future__ import division
 import argparse
 import pandas as pd
+import pickle
 
 # useful stuff
 import numpy as np
@@ -10,6 +11,8 @@ from sklearn.preprocessing import normalize
 # added imports
 import nltk
 from nltk.tokenize import word_tokenize
+import math
+from collections import Counter
 
 __authors__ = ['Chloe Daems','Anne-Claire Laisney','Amir Mahmoudi']
 __emails__  = ['chloe.daems@student-cs.fr','anneclaire.laisney@student-cs.fr','amir.mahmoudi@student-cs.fr']
@@ -51,12 +54,12 @@ def text2sentences(path):
             # removing digits
             for d in digits:
                 l = l.replace(str(d),'')
+            #remove empty words 
+            l = l.replace("  ",' ')
             # stemming
             l = lemmatize_text(l)
             # lowercase + splitting to create unigrams
             l = l.lower().split()
-            #remove empty words 
-            l = [x.strip() for x in l if len(x.strip())>1]
             
             sentences.append(l)
     return sentences
@@ -94,7 +97,7 @@ class SkipGram:
         
         #Context size: weight more closer context
         counter = word_repetition(self.trainset)
-        
+        self.rep=counter
         for word in counter:
             if counter[word] >= self.minCount:
                 self.vocab[word] = counter[word]
@@ -115,17 +118,23 @@ class SkipGram:
         # Initializes weights to random normal distributed numbers
         # Two embeddings for each word (one as context, one as word) 
         # Might want to initialize them differently
-        self.wEmbed = np.random.random( size=(len(self.vocab.values()), self.nEmbed) ) * 0.2
-        self.cEmbed = np.random.random( size=(len(self.vocab.values()), self.nEmbed) ) * 0.1
-        
+        self.wEmbed = np.random.random( size=(len(self.vocab.values()), self.nEmbed) ) * 0.05#0.2
+        self.cEmbed = np.random.random( size=(len(self.vocab.values()), self.nEmbed) ) * 0.13#0.1
+
         # Initialize Unigram Table
          # http://mccormickml.com/2017/01/11/word2vec-tutorial-part-2-negative-sampling/
         # Size of Unigram Table: 100 millions
-        self.unigramTableSize = int(1e8)
+        #self.unigramTableSize = int(1e2)
         
         # fill this table with the index of each word in the vocabulary multiple times, and the number of times a word’s index appears in the table is given by P(wi) * table_size
         #Create the unigram table
-        
+        #self.unigramTable = {x:self.vocab[x]*len(self.vocab.keys()) for x in self.vocab.keys()}
+        #self.unigramTable =self.vocab.items()
+        test_list= [self.w2id[word] for word in list(self.vocab.keys())]
+        p = list(self.vocab.values())
+        self.unigramTableSize = int(1e8)
+        self.unigramTable = np.random.choice(test_list, size=self.unigramTableSize, p=p)
+        print("init done")
     # ----------------------------------
     
     def sample(self, omit):
@@ -133,14 +142,13 @@ class SkipGram:
         Samples negative words, ommitting those in set omit
         """
         #  we construct k samples (w,c1),...,(w,ck), where each cj is drawn according to its unigram distribution raised to the 3/4 power
-        
         samples_negative_words = []
         
         while len(samples_negative_words) < self.negativeRate:
-            sample = self.unigramTable[np.random.randint(0, self.unigramSize)]
+            sample = self.unigramTable[np.random.randint(0, len(self.unigramTable))]
             if sample not in omit:
                 samples_negative_words.append(sample)
-        
+                
         return samples_negative_words
 
     # ----------------------------------
@@ -152,8 +160,8 @@ class SkipGram:
         '''
         return 1/(1 + np.exp(-x))
     
-    def gradient_(x,y):
-        return (x-1) * y
+    def gradient_(self,x,y):
+        return (x-1)*y
     
     # Update both embeddings in each iteration. 
     # Derivation is the same (symmetric), but with respect to a different variable
@@ -164,27 +172,26 @@ class SkipGram:
         '''
         for epoch in range(self.epochs):
             for counter, sentence in enumerate(self.trainset):
-                sentence = list(filter(lambda word: word in self.vocab, sentence))
-
                 for wpos, word in enumerate(sentence):
-                    wIdx = self.w2id[word]
+                    if word in self.w2id.keys():
+                        wIdx = self.w2id[word]
                     winsize = np.random.randint(self.winSize) + 1
                     start = max(0, wpos - winsize)
                     end = min(wpos + winsize + 1, len(sentence))
                     
                     for context_word in sentence[start:end]:
-                        ctxtId = self.w2id[context_word]
-                        #if ctxtId == wIdx: continue
+                        if word in self.w2id.keys():
+                            ctxtId = self.w2id[context_word]
+                        if ctxtId == wIdx: continue
                         negativeIds = self.sample({wIdx, ctxtId})
                         self.trainWord(wIdx, ctxtId, negativeIds)
                         self.trainWords += 1
-
-                if counter % 1000 == 0:
-                    print (" > training %d of %d" % (counter, len(self.trainset)))
+                if counter % 50 == 0:
+                    #print (" > training %d of %d" % (counter, len(self.trainset)))
                     self.loss.append(self.accLoss / self.trainWords)
                     self.trainWords = 0
                     self.accLoss = 0.
-            print(' > training Epoch {}: Loss = {}'.format(epoch+1,self.accLoss))
+            print(' > training Epoch {}: Loss = {}'.format(epoch+1,sum(self.accLoss)/len(self.accLoss)))
             
     def trainWord(self, wordId, contextId, negativeIds):
         '''
@@ -198,25 +205,23 @@ class SkipGram:
         # We want to calculate argmax(sum_1(f) + sum_2(g))
         
         # sum_1 of the pair (w,c) on the set D which is all word and context pairs we extract from the text
-        # f = log( sigma( v_c . v_w ) )  
-        f = sigma(v_c.dot(v_w))
-        gradient_v_w = gradient_(f,v_w)
-        grad_v_c = gradient_(f,v_c)
-        
+        # f = log( sigma( v_c . v_w ) )
+        f = self.sigma(v_w*v_c)
+        gradient_v_w = self.gradient_(f,v_w)
+        grad_v_c = self.gradient_(f,v_c)
+        self.accLoss -=np.log(f)
         # sum_2 of the pair (w,c) on the set D′ of randomly sampled negative examples
         # where g = log( sigma(-v_c . v_w ) )
-        
         for negativeId in negativeIds:
-            v_c_neg = self.cEmbed[negativeId]
-            g -= np.log(sigma(-v_w.dot(v_c_neg)))
-            gradient_v_c_neg = gradient_(g,v_c_neg)
-            gradient_v_w += gradient_(g,v_c_neg)
-            self.cEmbed[negativeId] -= self.learningRate * gradient_c_neg
+            v_c_neg = self.cEmbed[int(negativeId)]
+            g = np.log(self.sigma(-v_w*v_c_neg))
+            gradient_v_c_neg = - self.gradient_(v_c_neg,g)
+            gradient_v_w -= self.gradient_(v_c_neg,g)
+            self.cEmbed[negativeId] -= self.learningRate * gradient_v_c_neg
         
         self.wEmbed[wordId] -= self.learningRate * gradient_v_w
         self.cEmbed[contextId] -= self.learningRate * grad_v_c
-        self.accLoss += loss
-        
+        self.accLoss -=g
     # ----------------------------------
     
     def save(self,path):
@@ -252,8 +257,10 @@ class SkipGram:
         :param word2:
         :return: a float \in [0,1] indicating the similarity (the higher the more similar)
         """
-        counterA = Counter(word1)
-        counterB = Counter(word2)
+        if word1 in self.vocab:
+            counterA = Counter(self.wEmbed[self.w2id[word1]])
+        if word2 in self.vocab:
+            counterB = Counter(self.wEmbed[self.w2id[word2]])
     
         terms = set(counterA).union(counterB)
         dotprod = sum(counterA.get(k, 0) * counterB.get(k, 0) for k in terms)
@@ -261,11 +268,11 @@ class SkipGram:
         magB = math.sqrt(sum(counterB.get(k, 0)**2 for k in terms))
         return dotprod / (magA * magB)
         
-    def compare_two_tokenized_sentences(first_tokenized_sentence, second_tokenized_sentence):
+    def compare_two_tokenized_sentences(self,first_tokenized_sentence, second_tokenized_sentence):
         """
         Cosine
         """
-        return similarity(first_tokenized_sentence, second_tokenized_sentence)
+        return self.similarity(first_tokenized_sentence, second_tokenized_sentence)
 
     # ----------------------------------
     
