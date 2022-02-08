@@ -136,7 +136,7 @@ class SkipGram:
         
         samples_negative_words = []
         
-        while len(samples_negative_words) < self.negativeRate:
+        while len(random_sample_id) < self.negativeRate:
             sample = self.unigramTable[np.random.randint(0, self.unigramSize)]
             if sample not in omit:
                 samples_negative_words.append(sample)
@@ -174,7 +174,8 @@ class SkipGram:
                     
                     for context_word in sentence[start:end]:
                         ctxtId = self.w2id[context_word]
-                        #if ctxtId == wIdx: continue
+                        ctxtId = 0
+                        if ctxtId == wIdx: continue
                         negativeIds = self.sample({wIdx, ctxtId})
                         self.trainWord(wIdx, ctxtId, negativeIds)
                         self.trainWords += 1
