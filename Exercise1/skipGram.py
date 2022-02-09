@@ -92,6 +92,9 @@ class SkipGram:
         self.loss = []
         self.accLoss = 0
         self.trainWords = 0
+
+        #an index for the word not in vocab
+        self.vocab["Not Inside Vocab"] = 0
         
         #Context size: weight more closer context
         counter = word_repetition(self.trainset)
@@ -116,11 +119,10 @@ class SkipGram:
         # Initializes weights to random normal distributed numbers
         # Two embeddings for each word (one as context, one as word) 
         # Might want to initialize them differently
-        self.wEmbed = np.random.random( size=(len(self.vocab.values()), self.nEmbed) ) * 0.1#0.2
-        #self.cEmbed = np.random.random( size=(len(self.vocab.values()), self.nEmbed) ) * 0.1#0.1
         #self.wEmbed = np.random.uniform(-0.5, 0.5, size=(len(self.vocab.values()), self.nEmbed)) / self.nEmbed
         #self.cEmbed = np.random.uniform(-0.5, 0.5, size=(len(self.vocab.values()), self.nEmbed)) / self.nEmbed
-        self.cEmbed = np.zeros( shape=(len(self.vocab.values()), self.nEmbed) )
+        self.cEmbed = np.random.random(size=(len(self.vocab.values()), self.nEmbed))*0.1
+        self.wEmbed = np.random.random(size=(len(self.vocab.values()), self.nEmbed))*0.1
 
         # Initialize Unigram Table
          # http://mccormickml.com/2017/01/11/word2vec-tutorial-part-2-negative-sampling/
@@ -154,15 +156,6 @@ class SkipGram:
 
     # ----------------------------------
     
-    # σ(x) = 1/(1+exp(-x))
-    def sigma(self,x):
-        '''
-        Returns the value of sigma(x)
-        '''
-        return 1/(1 + np.exp(-x))
-    
-    def gradient_(self,x,y):
-        return (x-1)*y
     
     # Update both embeddings in each iteration. 
     # Derivation is the same (symmetric), but with respect to a different variable
@@ -176,6 +169,8 @@ class SkipGram:
                 for wpos, word in enumerate(sentence):
                     if word in self.w2id.keys():
                         wIdx = self.w2id[word]
+                    else:
+                        wIdx = self.w2id["Not Inside Vocab"]
                     winsize = np.random.randint(self.winSize) + 1
                     start = max(0, wpos - winsize)
                     end = min(wpos + winsize + 1, len(sentence))
@@ -183,16 +178,27 @@ class SkipGram:
                     for context_word in sentence[start:end]:
                         if context_word in self.w2id.keys():
                             ctxtId = self.w2id[context_word]
+                        else:
+                            wIdx = self.w2id["Not Inside Vocab"]
                         if ctxtId == wIdx: continue
                         negativeIds = self.sample({wIdx, ctxtId})
                         self.trainWord(wIdx, ctxtId, negativeIds)
                         self.trainWords += 1
-                if counter % 50 == 0:
-                    #print (" > training %d of %d" % (counter, len(self.trainset)))
-                    self.loss.append(self.accLoss / self.trainWords)
-                    self.trainWords = 0
-                    self.accLoss = 0.
-            print(' > training Epoch {}: Loss = {}'.format(epoch+1,sum(self.accLoss)/len(self.accLoss)))
+            self.loss.append(self.accLoss / self.trainWords)
+            self.trainWords = 0
+            self.accLoss = 0.
+            print(' > training Epoch {}: Loss = {}'.format(epoch+1,self.loss[-1]))
+
+
+    # σ(x) = 1/(1+exp(-x))
+    def sigma(self,x):
+        '''
+        Returns the value of sigma(x)
+        '''
+        return 1/(1 + np.exp(-x))
+    
+    def gradient_(self,x,y):
+        return (x-1)*y
 
     def trainWord(self, wordId, contextId, negativeIds):
         '''
@@ -207,15 +213,15 @@ class SkipGram:
         
         # sum_1 of the pair (w,c) on the set D which is all word and context pairs we extract from the text
         # f = log( sigma( v_c . v_w ) )
-        f = self.sigma(v_c*v_w)
+        f = self.sigma(v_w.dot(v_c))
         gradient_v_w = self.gradient_(f,v_c)
         grad_v_c = self.gradient_(f,v_w)
-        loss =np.log(f)
+        loss =-np.log(f)
         # sum_2 of the pair (w,c) on the set D′ of randomly sampled negative examples
         # where g = log( sigma(-v_c . v_w ) )
         for negativeId in negativeIds:
             v_c_neg = self.cEmbed[int(negativeId)]
-            g = self.sigma(-v_c_neg*v_w)
+            g = self.sigma(-v_w.dot(v_c_neg))
             loss -=np.log(g)
             gradient_v_c_neg = -self.gradient_(g,v_w)
             gradient_v_w -= self.gradient_(g,v_c_neg)
@@ -260,18 +266,23 @@ class SkipGram:
         :param word2:
         :return: a float \in [0,1] indicating the similarity (the higher the more similar)
         """
-        try :
+        if word1 in self.vocab.keys():
             w1_emb = self.wEmbed[self.w2id[word1]]
+        else:
+            w1_emb = self.wEmbed[self.w2id["Not Inside Vocab"]]
+            print("word 1 isn't in the vocab")
+        if word2 in self.vocab.keys():
             w2_emb = self.wEmbed[self.w2id[word2]]
-            dotprod =w1_emb.T@w2_emb
-            print(dotprod)
-            magA = np.linalg.norm(w1_emb)
-            print(magA)
-            magB = np.linalg.norm(w2_emb)
-            print(magB)
-            return dotprod / (magA * magB)
-        except:
-            return 0
+        else:
+            w2_emb = self.wEmbed[self.w2id["Not Inside Vocab"]]
+            print("word 2 isn't in the vocab")
+        dotprod =np.sum(w1_emb*w2_emb)
+        print(dotprod)
+        magA = np.linalg.norm(w1_emb)
+        print(magA)
+        magB = np.linalg.norm(w2_emb)
+        print(magB)
+        return dotprod / (magA * magB)
         
     def compare_two_tokenized_sentences(self,first_tokenized_sentence, second_tokenized_sentence):
         """
