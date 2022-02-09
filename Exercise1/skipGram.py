@@ -11,8 +11,6 @@ from sklearn.preprocessing import normalize
 # added imports
 import nltk
 from nltk.tokenize import word_tokenize
-import math
-from collections import Counter
 
 __authors__ = ['Chloe Daems','Anne-Claire Laisney','Amir Mahmoudi']
 __emails__  = ['chloe.daems@student-cs.fr','anneclaire.laisney@student-cs.fr','amir.mahmoudi@student-cs.fr']
@@ -75,7 +73,7 @@ def loadPairs(path):
 
 class SkipGram:
     
-    def __init__(self, sentences, nEmbed=100, negativeRate=5, winSize = 5, minCount = 5, epochs = 10, learningRate = 0.1):
+    def __init__(self, sentences,wEmbedRate=0.1,cEmbedRate=0.1, nEmbed=100, negativeRate=5, winSize = 5, minCount = 5, epochs = 10, learningRate = 0.1):
         
         self.w2id = {} # word to ID mapping
         self.trainset = sentences # set of sentences
@@ -94,6 +92,8 @@ class SkipGram:
         self.loss = []
         self.accLoss = 0
         self.trainWords = 0
+        self.wEmbedRate=wEmbedRate
+        self.cEmbedRate=cEmbedRate
         
         #Context size: weight more closer context
         counter = word_repetition(self.trainset)
@@ -118,8 +118,8 @@ class SkipGram:
         # Initializes weights to random normal distributed numbers
         # Two embeddings for each word (one as context, one as word) 
         # Might want to initialize them differently
-        self.wEmbed = np.random.random( size=(len(self.vocab.values()), self.nEmbed) ) * 0.05#0.2
-        self.cEmbed = np.random.random( size=(len(self.vocab.values()), self.nEmbed) ) * 0.13#0.1
+        self.wEmbed = np.random.random( size=(len(self.vocab.values()), self.nEmbed) ) * 0.1#0.2
+        self.cEmbed = np.random.random( size=(len(self.vocab.values()), self.nEmbed) ) * 0.1#0.1
 
         # Initialize Unigram Table
          # http://mccormickml.com/2017/01/11/word2vec-tutorial-part-2-negative-sampling/
@@ -192,7 +192,7 @@ class SkipGram:
                     self.trainWords = 0
                     self.accLoss = 0.
             print(' > training Epoch {}: Loss = {}'.format(epoch+1,sum(self.accLoss)/len(self.accLoss)))
-            
+
     def trainWord(self, wordId, contextId, negativeIds):
         '''
         calculating gradients and Update both embeddings in each iteration
@@ -206,22 +206,22 @@ class SkipGram:
         
         # sum_1 of the pair (w,c) on the set D which is all word and context pairs we extract from the text
         # f = log( sigma( v_c . v_w ) )
-        f = self.sigma(v_w*v_c)
-        gradient_v_w = self.gradient_(f,v_w)
-        grad_v_c = self.gradient_(f,v_c)
+        f = self.sigma(v_c*v_w)
+        gradient_v_w = self.gradient_(f,v_c)
+        grad_v_c = self.gradient_(f,v_w)
         self.accLoss -=np.log(f)
         # sum_2 of the pair (w,c) on the set D′ of randomly sampled negative examples
         # where g = log( sigma(-v_c . v_w ) )
         for negativeId in negativeIds:
             v_c_neg = self.cEmbed[int(negativeId)]
-            g = np.log(self.sigma(-v_w*v_c_neg))
-            gradient_v_c_neg = - self.gradient_(v_c_neg,g)
-            gradient_v_w -= self.gradient_(v_c_neg,g)
+            g = self.sigma(-v_c_neg*v_w)
+            gradient_v_c_neg = - self.gradient_(g,v_w)
+            gradient_v_w -= self.gradient_(g,v_c_neg)
             self.cEmbed[negativeId] -= self.learningRate * gradient_v_c_neg
         
         self.wEmbed[wordId] -= self.learningRate * gradient_v_w
         self.cEmbed[contextId] -= self.learningRate * grad_v_c
-        self.accLoss -=g
+        self.accLoss -=np.log(g)
     # ----------------------------------
     
     def save(self,path):
@@ -257,15 +257,18 @@ class SkipGram:
         :param word2:
         :return: a float \in [0,1] indicating the similarity (the higher the more similar)
         """
-        if word1 in self.vocab:
-            counterA = Counter(self.wEmbed[self.w2id[word1]])
-        if word2 in self.vocab:
-            counterB = Counter(self.wEmbed[self.w2id[word2]])
-    
-        terms = set(counterA).union(counterB)
-        dotprod = sum(counterA.get(k, 0) * counterB.get(k, 0) for k in terms)
-        magA = math.sqrt(sum(counterA.get(k, 0)**2 for k in terms))
-        magB = math.sqrt(sum(counterB.get(k, 0)**2 for k in terms))
+        if word1 in self.vocab.keys():
+            counterA = np.array(self.wEmbed[self.w2id[word1]])
+        else : return 0
+        if word2 in self.vocab.keys():
+            counterB = np.array(self.wEmbed[self.w2id[word2]])
+        else : return 0
+        dotprod = counterA.dot(counterB)
+        print(dotprod)
+        magA = np.linalg.norm(counterA)
+        print(magA)
+        magB = np.linalg.norm(counterB)
+        print(magB)
         return dotprod / (magA * magB)
         
     def compare_two_tokenized_sentences(self,first_tokenized_sentence, second_tokenized_sentence):
