@@ -73,7 +73,7 @@ def loadPairs(path):
 
 class SkipGram:
     
-    def __init__(self, sentences,wEmbedRate=0.1,cEmbedRate=0.1, nEmbed=100, negativeRate=5, winSize = 5, minCount = 5, epochs = 10, learningRate = 0.1):
+    def __init__(self, sentences, nEmbed=100, negativeRate=5, winSize = 5, minCount = 5, epochs = 10, learningRate = 0.1):
         
         self.w2id = {} # word to ID mapping
         self.trainset = sentences # set of sentences
@@ -92,8 +92,6 @@ class SkipGram:
         self.loss = []
         self.accLoss = 0
         self.trainWords = 0
-        self.wEmbedRate=wEmbedRate
-        self.cEmbedRate=cEmbedRate
         
         #Context size: weight more closer context
         counter = word_repetition(self.trainset)
@@ -119,7 +117,10 @@ class SkipGram:
         # Two embeddings for each word (one as context, one as word) 
         # Might want to initialize them differently
         self.wEmbed = np.random.random( size=(len(self.vocab.values()), self.nEmbed) ) * 0.1#0.2
-        self.cEmbed = np.random.random( size=(len(self.vocab.values()), self.nEmbed) ) * 0.1#0.1
+        #self.cEmbed = np.random.random( size=(len(self.vocab.values()), self.nEmbed) ) * 0.1#0.1
+        #self.wEmbed = np.random.uniform(-0.5, 0.5, size=(len(self.vocab.values()), self.nEmbed)) / self.nEmbed
+        #self.cEmbed = np.random.uniform(-0.5, 0.5, size=(len(self.vocab.values()), self.nEmbed)) / self.nEmbed
+        self.cEmbed = np.zeros( shape=(len(self.vocab.values()), self.nEmbed) )
 
         # Initialize Unigram Table
          # http://mccormickml.com/2017/01/11/word2vec-tutorial-part-2-negative-sampling/
@@ -180,7 +181,7 @@ class SkipGram:
                     end = min(wpos + winsize + 1, len(sentence))
                     
                     for context_word in sentence[start:end]:
-                        if word in self.w2id.keys():
+                        if context_word in self.w2id.keys():
                             ctxtId = self.w2id[context_word]
                         if ctxtId == wIdx: continue
                         negativeIds = self.sample({wIdx, ctxtId})
@@ -209,19 +210,21 @@ class SkipGram:
         f = self.sigma(v_c*v_w)
         gradient_v_w = self.gradient_(f,v_c)
         grad_v_c = self.gradient_(f,v_w)
-        self.accLoss -=np.log(f)
+        loss =np.log(f)
         # sum_2 of the pair (w,c) on the set D′ of randomly sampled negative examples
         # where g = log( sigma(-v_c . v_w ) )
         for negativeId in negativeIds:
             v_c_neg = self.cEmbed[int(negativeId)]
             g = self.sigma(-v_c_neg*v_w)
-            gradient_v_c_neg = - self.gradient_(g,v_w)
+            loss -=np.log(g)
+            gradient_v_c_neg = -self.gradient_(g,v_w)
             gradient_v_w -= self.gradient_(g,v_c_neg)
             self.cEmbed[negativeId] -= self.learningRate * gradient_v_c_neg
         
         self.wEmbed[wordId] -= self.learningRate * gradient_v_w
         self.cEmbed[contextId] -= self.learningRate * grad_v_c
-        self.accLoss -=np.log(g)
+
+        self.accLoss+=loss
     # ----------------------------------
     
     def save(self,path):
@@ -257,19 +260,18 @@ class SkipGram:
         :param word2:
         :return: a float \in [0,1] indicating the similarity (the higher the more similar)
         """
-        if word1 in self.vocab.keys():
-            counterA = np.array(self.wEmbed[self.w2id[word1]])
-        else : return 0
-        if word2 in self.vocab.keys():
-            counterB = np.array(self.wEmbed[self.w2id[word2]])
-        else : return 0
-        dotprod = counterA.dot(counterB)
-        print(dotprod)
-        magA = np.linalg.norm(counterA)
-        print(magA)
-        magB = np.linalg.norm(counterB)
-        print(magB)
-        return dotprod / (magA * magB)
+        try :
+            w1_emb = self.wEmbed[self.w2id[word1]]
+            w2_emb = self.wEmbed[self.w2id[word2]]
+            dotprod =w1_emb.T@w2_emb
+            print(dotprod)
+            magA = np.linalg.norm(w1_emb)
+            print(magA)
+            magB = np.linalg.norm(w2_emb)
+            print(magB)
+            return dotprod / (magA * magB)
+        except:
+            return 0
         
     def compare_two_tokenized_sentences(self,first_tokenized_sentence, second_tokenized_sentence):
         """
