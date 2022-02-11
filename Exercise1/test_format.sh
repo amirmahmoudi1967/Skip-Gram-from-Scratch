@@ -75,7 +75,7 @@ re="^-?[0-9]*\.?[0-9]*$"
 miss=0
 for oneline in $(cat $RESULTFILE)
 do
-	if ! [[ "$oneline" =~ $re ]]; then
+	if ! [["$oneline"=~$re]]; then
 		echo "ERROR, line $oneline should be a number"
 		miss=$(($miss +1))
 	fi
