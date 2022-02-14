@@ -4,9 +4,9 @@
 # This is part of an assignment of the NLP module (DSBA, CentraleSupelec & ESSEC). More info: https://sites.google.com/view/cs-dsba-nlp/home
 
 # USAGE: ./test_script.sh filename.tar.gz
-
+sudo apt-get install unzip
+sudo apt-get install python3
 tar zxfv $1
-
 
 SIMLEX_URL=https://www.cl.cam.ac.uk/~fh295/SimLex-999.zip
 BWC_URL=https://www.statmt.org/lm-benchmark/1-billion-word-language-modeling-benchmark-r13output.tar.gz
