@@ -12,6 +12,7 @@ from sklearn.preprocessing import normalize
 import nltk
 from nltk.tokenize import word_tokenize
 nltk.download('omw-1.4')
+from random import sample
 
 __authors__ = ['Chloe Daems','Anne-Claire Laisney','Amir Mahmoudi']
 __emails__  = ['chloe.daems@student-cs.fr','anneclaire.laisney@student-cs.fr','amir.mahmoudi@student-cs.fr']
@@ -74,13 +75,14 @@ def loadPairs(path):
 
 class SkipGram:
     
-    def __init__(self,trainset,w2id=None,wEmbed=None,vocab=None, nEmbed=100, negativeRate=5, winSize = 5, minCounts = 5, epochs = 2, learningRate = 0.1):
+    def __init__(self,trainset,batch_size=512, w2id=None,wEmbed=None,vocab=None, nEmbed=150, negativeRate=3, winSize = 2, minCounts = 1, epochs = 300, learningRate = 1e-2):
         
         if w2id!=None:
             self.w2id=w2id
             self.wEmbed=wEmbed
             self.vocab=vocab
         else:
+            self.batch_size = batch_size
             self.trainset = trainset # set of sentences
             self.nEmbed = nEmbed # size of the embeddings
             self.negativeRate = negativeRate # number of noisy example for each context word
@@ -170,7 +172,7 @@ class SkipGram:
         Training function
         '''
         for epoch in range(self.epochs):
-            for counter, sentence in enumerate(self.trainset):
+            for counter, sentence in enumerate(sample(self.trainset,self.batch_size)):
                 for wpos, word in enumerate(sentence):
                     if word in self.w2id.keys():
                         wIdx = self.w2id[word]
@@ -184,7 +186,7 @@ class SkipGram:
                         if context_word in self.w2id.keys():
                             ctxtId = self.w2id[context_word]
                         else:
-                            wIdx = self.w2id["Not Inside Vocab"]
+                            ctxtId = self.w2id["Not Inside Vocab"]
                         if ctxtId == wIdx: continue
                         negativeIds = self.sample({wIdx, ctxtId})
                         self.trainWord(wIdx, ctxtId, negativeIds)
@@ -287,7 +289,8 @@ class SkipGram:
         #print(magA)
         magB = np.linalg.norm(w2_emb)
         #print(magB)
-        return dotprod / (magA * magB)
+        cosine=dotprod / (magA * magB)
+        return (cosine+1)/2
         
 
     # ----------------------------------
