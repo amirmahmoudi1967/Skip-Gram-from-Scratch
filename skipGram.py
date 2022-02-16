@@ -75,7 +75,7 @@ def loadPairs(path):
 
 class SkipGram:
     
-    def __init__(self,trainset,batch_size=512, w2id=None,wEmbed=None,vocab=None, nEmbed=150, negativeRate=3, winSize = 2, minCounts = 1, epochs = 300, learningRate = 1e-2):
+    def __init__(self,trainset,batch_size=512, w2id=None,wEmbed=None,vocab=None, nEmbed=70, negativeRate=6, winSize = 20, minCounts = 3, epochs = 10, learningRate = 1e-1):
         
         if w2id!=None:
             self.w2id=w2id
