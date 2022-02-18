@@ -1,7 +1,0 @@
-argparse
-pandas
-pickle-mixin
-numpy
-scipy
-sklearn
-nltk

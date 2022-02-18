@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import division
 import argparse
 import pandas as pd
@@ -12,6 +13,7 @@ from sklearn.preprocessing import normalize
 import nltk
 from nltk.tokenize import word_tokenize
 nltk.download('omw-1.4')
+nltk.download('wordnet')
 from random import sample
 
 __authors__ = ['Chloe Daems','Anne-Claire Laisney','Amir Mahmoudi']
@@ -75,7 +77,7 @@ def loadPairs(path):
 
 class SkipGram:
     
-    def __init__(self,trainset,batch_size=512, w2id=None,wEmbed=None,vocab=None, nEmbed=70, negativeRate=6, winSize = 20, minCounts = 3, epochs = 10, learningRate = 1e-1):
+    def __init__(self,trainset,batch_size=256, w2id=None,wEmbed=None,vocab=None, nEmbed=70, negativeRate=6, winSize = 20, minCounts = 3, epochs = 50, learningRate = 1e-2):
         
         if w2id!=None:
             self.w2id=w2id
@@ -172,7 +174,10 @@ class SkipGram:
         Training function
         '''
         for epoch in range(self.epochs):
-            for counter, sentence in enumerate(sample(self.trainset,self.batch_size)):
+          for step in range (len(self.trainset) // self.batch_size):
+            #define batchs
+            batch = sample(self.trainset, self.batch_size)
+            for counter, sentence in enumerate(batch):
                 for wpos, word in enumerate(sentence):
                     if word in self.w2id.keys():
                         wIdx = self.w2id[word]
@@ -191,10 +196,10 @@ class SkipGram:
                         negativeIds = self.sample({wIdx, ctxtId})
                         self.trainWord(wIdx, ctxtId, negativeIds)
                         self.trainWords += 1
-            self.loss.append(self.accLoss / self.trainWords)
-            self.trainWords = 0
-            self.accLoss = 0.
-            print(' > training Epoch {}: Loss = {}'.format(epoch+1,self.loss[-1]))
+          self.loss.append(self.accLoss / self.trainWords)
+          self.trainWords = 0
+          self.accLoss = 0.
+          print(' > training Epoch {}: Loss = {}'.format(epoch+1,self.loss[-1]))
 
 
     # σ(x) = 1/(1+exp(-x))
