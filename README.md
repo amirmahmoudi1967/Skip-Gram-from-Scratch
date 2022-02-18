@@ -3,6 +3,10 @@ This is our implementation of a Skip-Gram model with negative sampling.
 
 NB: We have a mistake in the test-format.sh. 
 **Concerning the test script we have an issue running it. The condition where the script verifies if the similarity values are numbers is an error but the values are numbers**. So, I think it will be better to use your own test_format.sh
+To generate the tar.gz skipGram file use this command :
+```
+  tar cvf skipGram.tar.gz skipGram.py
+  ```
   
 The easiest method is to **test the command lines directly in the terminal**, which is what we did to test the billion words vocabulary. 
 
