@@ -1,4 +1,4 @@
-# NLPExercise1
+# Skip Gram from Scratch
 This is our implementation of a Skip-Gram model with negative sampling.
 
 NB: We have a mistake in the test-format.sh. 
